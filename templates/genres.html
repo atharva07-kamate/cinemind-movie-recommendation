@@ -1,0 +1,9 @@
+{% extends 'base.html' %}{% block title %}Genres · CineMind{% endblock %}{% block breadcrumb %}Genres{% endblock %}
+{% block content %}
+<div class="page-intro"><div class="eyebrow">BROWSE THE MOVIELENS CATALOG</div><h1>Choose a <em>genre.</em></h1><p>Genre labels come directly from the MovieLens movie metadata. Multi-genre films appear in each matching collection.</p></div>
+<div class="genre-chip-grid">{% for genre in genres %}<a class="genre-chip {% if selected_genre==genre %}selected{% endif %}" href="/genres?genre={{ genre|urlencode }}">{{ genre }}<i class="fa-solid fa-arrow-right"></i></a>{% endfor %}</div>
+{% if selected_genre %}<section class="section"><div class="section-head"><div><div class="eyebrow">GENRE COLLECTION · {{ total }} MOVIES</div><h2>{{ selected_genre }}</h2><p class="subhead">Ranked by rating-count-adjusted popularity from the dataset.</p></div><a class="text-link" href="/search?genre={{ selected_genre|urlencode }}">Open in Explore <i class="fa-solid fa-arrow-right"></i></a></div>
+  {% if movies %}<div class="movie-grid">{% for movie in movies %}{% include 'partials/card.html' %}{% endfor %}</div><div class="pagination"><span>Page {{ page }} of {{ pages }}</span><div>{% if page>1 %}<a class="button secondary" href="/genres?genre={{ selected_genre|urlencode }}&page={{ page-1 }}">Previous</a>{% endif %}{% if page<pages %}<a class="button secondary" href="/genres?genre={{ selected_genre|urlencode }}&page={{ page+1 }}">Next</a>{% endif %}</div></div>
+  {% else %}<div class="empty-state"><strong>No movies match {{ selected_genre }}</strong><p>Try a different genre from the list above.</p></div>{% endif %}
+{% else %}<div class="empty-state profile-empty"><div class="empty-icon"><i class="fa-solid fa-layer-group"></i></div><strong>Select a genre to explore movies</strong><p>The available genres are read from this copy of MovieLens.</p></div>{% endif %}
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends 'base.html' %}{% block title %}For You · CineMind{% endblock %}{% block breadcrumb %}For You{% endblock %}
+{% block content %}
+<div class="page-intro"><div class="eyebrow">PERSONALIZED DISCOVERY</div><h1>Picked for <em>your profile.</em></h1><p>Recommendations use a selected MovieLens rating history, similar-user patterns, genre signals, and weighted popularity.</p></div>
+<form class="filter-panel for-you-filters" method="get" action="/for-you">
+  <div class="filter-field"><label for="forYouUser">MOVIELENS USER ID</label><select id="forYouUser" name="user_id"><option value="">Choose a user</option>{% for id in user_ids %}<option value="{{ id }}" {% if selected_user==id %}selected{% endif %}>User {{ id }}</option>{% endfor %}</select></div>
+  <div class="filter-field"><label for="forYouGenre">GENRE</label><select id="forYouGenre" name="genre"><option value="">All genres</option>{% for item in genres %}<option value="{{ item }}" {% if genre==item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></div>
+  <div class="filter-field"><label for="minRating">MINIMUM MOVIELENS RATING</label><select id="minRating" name="min_rating">{% for value,label in [(0,'Any rating'),(3,'3.0+'),(3.5,'3.5+'),(4,'4.0+'),(4.5,'4.5+')] %}<option value="{{ value }}" {% if min_rating==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+  <div class="filter-field"><label for="forYouSort">SORT BY</label><select id="forYouSort" name="sort"><option value="relevance" {% if sort=='relevance' %}selected{% endif %}>Relevance</option><option value="rating" {% if sort=='rating' %}selected{% endif %}>Average rating</option><option value="popularity" {% if sort=='popularity' %}selected{% endif %}>Popularity</option></select></div>
+  <div class="filter-field"><label for="forYouLimit">RESULTS</label><select id="forYouLimit" name="limit">{% for value in [10,20,30] %}<option value="{{ value }}" {% if limit==value %}selected{% endif %}>{{ value }} movies</option>{% endfor %}</select></div>
+  <button class="button primary" type="submit">Update recommendations <i class="fa-solid fa-arrow-right"></i></button>
+</form>
+{% if error %}<div class="error-banner page-error" role="alert">{{ error }}</div>{% endif %}
+{% if selected_user %}<div class="results-heading"><div><div class="eyebrow">MOVIELENS PROFILE · {{ selected_user }}</div><h2>Recommendations for user {{ selected_user }}</h2><p class="subhead">Already-rated titles are excluded. Explanations describe the scoring signal used for each item.</p></div><span class="result-count">{{ recommendations|length }} movies</span></div>
+  {% if recommendations %}<div class="movie-grid results-grid">{% for movie in recommendations %}{% include 'partials/card.html' %}{% endfor %}</div>{% else %}<div class="empty-state"><strong>No movies match those filters</strong><p>Try another genre or a lower minimum rating.</p></div>{% endif %}
+{% elif not error %}<div class="empty-state profile-empty"><div class="empty-icon"><i class="fa-solid fa-user-check"></i></div><strong>Select a MovieLens user to begin</strong><p>Recommendations will be based on ratings in that user’s profile.</p></div>{% endif %}
+{% endblock %}

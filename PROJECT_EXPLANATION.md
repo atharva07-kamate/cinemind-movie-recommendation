@@ -1,96 +1,134 @@
-# Project Explanation — Recommendation System for Digital Platforms
+# Project Explanation — CineMind
 
 ## Problem statement
 
-Large digital catalogs can make it difficult for users to discover movies that match their interests. A recommendation system learns from past ratings and item descriptions to rank useful choices.
+People can have difficulty finding films that match their interests in a large catalog. A recommendation system can use known user ratings and movie information to rank items that may be relevant.
 
 ## Objective
 
-Build a local web application that analyzes real MovieLens interactions, generates explainable personalized and similar-movie recommendations, and measures recommendation quality with a reproducible offline evaluation.
+CineMind is a local-first web application that analyzes real MovieLens rating interactions and genre metadata. It provides personalized recommendations, movie similarity, taste summaries, genre discovery, analytics, and offline model evaluation.
 
 ## Dataset
 
-MovieLens latest-small contains movie titles and genres, user ratings, tags, and external IDs. The supplied snapshot has 9,742 movies, 100,836 ratings, and 610 users. It is stored in `data/`; no movie catalog is manually invented. See `data/MOVIELENS_README.txt` for the source citation and license.
+MovieLens latest-small includes 9,742 movies, 100,836 ratings, and 610 anonymous dataset users. The data are kept in the `data/` folder. The project does not invent movies, ratings, statistics, user preferences, or metrics. The original data README and terms are stored in `data/MOVIELENS_README.txt`.
+
+The ratings represent ratings in the dataset; they do not prove a user watched the movie. User IDs shown in CineMind are MovieLens identifiers and are not CineMind accounts.
 
 ## Data preprocessing
 
-The loader removes duplicate movie rows and duplicate user/movie ratings, converts identifiers and ratings to numeric values, drops malformed records, accepts ratings from 0.5 to 5, fills missing genres, and ignores ratings whose movie ID is not present. `movies.csv` and `ratings.csv` are required; links and tags are optional.
+`utils/data_loader.py`:
 
-## Algorithms
+1. Loads `movies.csv` and `ratings.csv` from a path relative to the project.
+2. Removes duplicate movie IDs and duplicate user/movie ratings.
+3. Converts IDs and ratings to numeric values and removes malformed values.
+4. Keeps ratings within MovieLens’s 0.5–5.0 scale and removes references to unknown movie IDs.
+5. Replaces missing genre data safely and loads links/tags only when present.
 
-### Popularity-based
+The Flask app loads the dataset and creates the recommender once when its process starts. Expensive per-movie similarity matrices are not recomputed on every request. Dataset-level analytic summaries are cached in the model instance.
 
-Popularity uses a Bayesian weighted average: a movie mean is blended with the global mean in proportion to its rating count. This reduces the impact of a high average based on very few ratings.
+## Recommendation algorithms
 
-### Content-based
+### Popularity-based recommendation
 
-Movie genres are tokenized into TF-IDF features. TF-IDF represents each genre in a way that gives less weight to common terms. Cosine similarity compares vector directions and returns larger values for titles with more similar genre combinations. A user's content profile combines genres from movies rated at least 4 stars.
+The model calculates each movie’s mean rating and rating count. Its weighted popularity score blends the movie average with the global average. Movies with few ratings are pulled toward the global mean so a one-rating film does not automatically top the ranking.
+
+### Content-based recommendation
+
+Genre text is represented using TF-IDF. TF-IDF converts genre tokens into numeric features and reduces the relative weight of common tokens. Cosine similarity compares feature-vector direction and measures genre overlap. Similar Movies uses these movie features. A personalized genre profile uses movies rated at least 4 stars by that user.
 
 ### Collaborative filtering
 
-The user–item matrix has users as rows, movies as columns, and rating values in cells. Cosine similarity compares user rating patterns. Ratings from similar users are combined to score titles the active user has not rated. This can find interests that genre overlap alone would miss.
+The user–item matrix has users in rows, movies in columns, and known rating values in its cells. Cosine similarity compares users’ rating patterns. Ratings from similar users help score movies the selected user has not rated. This is collaborative filtering: recommendation comes from other users’ behavior, not genre overlap alone.
 
-### Hybrid
+### Hybrid and For You
 
-Hybrid ranking normalizes the collaborative, content, and popularity signals to comparable ranges and combines them with configurable weights (0.45, 0.40, and 0.15 by default). “For You” uses a larger collaborative weight. Already-rated movies are filtered out.
+Collaborative, content, and popularity scores are normalized and combined. The configurable hybrid weights are 0.45, 0.40, and 0.15. The taste-led For You mode uses 0.65, 0.20, and 0.15. Personalized results exclude already-rated movies and each result has a reason derived from the signals available to it. When a profile has limited preference data, the popularity signal provides a fallback.
+
+## My Taste
+
+My Taste reads only the selected MovieLens user’s actual rating records. It reports the number of rated movies and their average rating, counts rated-movie interactions by genre, compares the user’s average score within each genre, and lists their highest-rated movies.
+
+These are two different observations: **frequency** means how many rated titles are associated with a genre; **genre average** means the mean rating this profile assigned to titles in that genre. A movie with several genre labels contributes to each. A profile with fewer than five ratings receives an explicit low-data message.
+
+## Genre discovery and browsing
+
+Genre options are derived from the actual labels in `movies.csv`; “(no genres listed)” is handled as missing genre data. Home-page rows and genre pages rank movies using dataset ratings and weighted popularity. Highest-rated selections require a minimum rating count, while Hidden Gems require at least five ratings, an average of at least 3.8, and a rating count below a dataset-based cutoff.
+
+Explore Movies provides title search, genre and minimum-average filters, sorting, and pagination. Movie details show dataset average/count, release year when present in the title, rating distribution, and genre-similar movies.
+
+## Analytics
+
+All chart inputs are calculated from loaded MovieLens data:
+
+- Genre distribution counts unique catalog movies for each genre. Counts overlap for movies with multiple genres.
+- User rating distribution counts each half-star rating value.
+- Top 10 movies use their real rating counts.
+- Average rating versus rating count uses a deterministic, bounded sample of rated movies.
+- Average rating by genre uses rating records associated with movies in that genre; multi-genre films contribute to each one.
+- Monthly activity uses Unix timestamps from `ratings.csv`, converted to UTC months.
+- The optional user taste chart counts that selected user’s rated-movie interactions by genre.
+
+If the Chart.js CDN is unavailable, the page displays compact data bars rather than blank charts. Recommendations and analytics inputs still come from local data.
 
 ## System workflow
 
-1. Flask loads the local CSV files once when `app.py` starts.
-2. The loader validates records and the model builds genre features, rating matrices, user similarities, and popularity statistics.
-3. The browser requests recommendations or search results from JSON endpoints.
-4. The Flask model returns ranked movies with relevant reasons.
-5. Analytics and the evaluation page display measurements computed from the same dataset.
+1. Flask loads and cleans the local CSV files once.
+2. scikit-learn builds genre TF-IDF features and cosine user similarity; Pandas/NumPy build the rating matrix and data summaries.
+3. Flask routes validate user/movie IDs and call the model.
+4. Jinja renders pages; JavaScript requests bounded JSON search/recommendation results and updates chart or filter views.
+5. The evaluation module computes offline quality metrics from the rating data.
 
 ## Evaluation
 
-A fixed-seed 80/20 split separates training and held-out ratings. RMSE and MAE compare held-out ratings to a baseline averaged from training global, user, and movie means. For Precision@K and Recall@K, user-based collaborative filtering ranks unseen movies and held-out ratings >=4 are considered relevant. Precision is relevant recommendations divided by K. Recall is relevant recommendations divided by all held-out relevant movies for that user. Values are averaged across eligible users. The evaluation is an offline estimate; a chronological split would better model future recommendations.
+`models/evaluation.py` uses a reproducible random 80/20 split with seed 42. For RMSE and MAE, it predicts from the training global, user, and movie averages. For Precision@K and Recall@K, a user-based cosine collaborative filter ranks unseen movies using training ratings. A held-out rating of 4 stars or more is relevant.
+
+Precision@K = relevant items in the first K results ÷ K. Recall@K = relevant held-out items in the first K results ÷ all held-out relevant items for that user. The ranking metrics are macro-averaged across users who have at least one relevant held-out item. RMSE penalizes larger errors more; MAE is the mean absolute rating difference. A random split does not preserve time order, so it is an offline estimate, not proof of future performance.
 
 ## Advantages
 
-- Uses a real and commonly recognized dataset.
-- Runs locally on CPU without paid APIs or a database.
-- Separates data, model, routes, templates, and presentation.
-- Combines explainable methods and reports genuine holdout metrics.
-- Provides a responsive dashboard, movie search, details, analytics, and model notes.
+- Uses a documented public movie-rating dataset with local CSV files.
+- Combines content similarity, collaborative filtering, and confidence-adjusted popularity.
+- Provides explanations, user taste analysis, and several movie discovery paths.
+- Runs on CPU and does not need a separate database or paid API.
+- Separates model, loader, Flask routes, templates, static assets, and documentation.
 
 ## Limitations
 
-- The data are a 2018 snapshot and do not include user demographics.
-- A new user or movie has little collaborative evidence.
-- Genres are coarse and do not describe plot, cast, or mood.
-- Random holdout evaluation may leak time patterns and does not guarantee real-world results.
-- MovieLens user IDs are dataset identifiers rather than accounts or identities.
+- MovieLens latest-small is a 2018 snapshot without demographic data or explicit view events.
+- Genre tags cannot describe plot, cast, mood, or nuanced preference.
+- New users and titles have limited collaborative evidence.
+- Offline random-split metrics can differ from future user behavior.
+- Poster imagery is represented by local stylized placeholders.
 
 ## Future scope
 
-Add temporal evaluation, compare item-based and matrix-factorization models, support implicit signals, allow local user preference profiles, improve accessibility, and optionally integrate licensed movie artwork.
+Compare temporal and item-based evaluation, try matrix-factorization models, add privacy-conscious local profile persistence, improve accessibility and keyboard testing, and consider optional licensed poster sources.
 
 ## Possible viva questions and answers
 
 **Q: What is a user–item matrix?**  
-A: A table with users on one axis, movies on the other, and observed rating values in the cells. Empty cells represent movies the user has not rated.
+A: A table with users on one axis, movies on the other, and known ratings in cells. A blank cell means there is no rating record for that user/movie pair.
 
 **Q: Why use cosine similarity?**  
-A: It compares the direction of two vectors, so similarity reflects rating/genre patterns rather than only their magnitude. It is efficient and widely used for sparse preference comparisons.
+A: It compares the direction of feature or rating vectors, making it a practical way to compare patterns even when their absolute sizes differ.
 
 **Q: What does TF-IDF do here?**  
-A: It transforms genre tokens into weighted numeric features. Common genre tokens receive lower distinguishing weight than less common ones.
+A: It converts genre tokens into weighted numeric features. Common tokens receive less distinguishing weight than rarer ones.
 
 **Q: What is collaborative filtering?**  
-A: It uses patterns of ratings from users with similar behavior to estimate which unseen movies may be relevant.
+A: It uses patterns from users with similar rating behavior to score movies another user has not rated.
 
-**Q: Why use a popularity prior?**  
-A: It provides a useful fallback and stabilizes average ratings for movies with few observations.
+**Q: Why use Bayesian popularity?**
+A: It uses the number of ratings as confidence. Sparse movie averages are pulled toward the overall mean so tiny samples have less influence.
 
-**Q: How does the hybrid model work?**  
-A: It normalizes and combines collaborative, content, and popularity scores using explicit configurable weights.
+**Q: How does the My Taste feature distinguish frequency from preference?**
+A: Frequency counts rated-movie interactions attached to a genre; preference-by-score compares the average rating that user assigned to movies in that genre.
 
-**Q: Define Precision@K and Recall@K.**  
-A: Precision@K is the share of the first K recommendations that are relevant. Recall@K is the share of all relevant held-out movies recovered in those first K.
+**Q: How does hybrid scoring work?**
+A: It normalizes collaborative, content, and popularity signals and combines them with explicit weights.
 
-**Q: What does RMSE indicate?**  
-A: It measures typical rating prediction error while penalizing large errors more strongly. Smaller values indicate closer predictions on the test split.
+**Q: Define Precision@K and Recall@K.**
+A: Precision@K is the fraction of the top K results that are relevant. Recall@K is the fraction of all relevant held-out items recovered in those results.
 
-**Q: What is a limitation of the evaluation split?**  
-A: A random split does not preserve time order; a chronological split would better test how a model predicts future user activity.
+**Q: What is a limitation of the evaluation?**
+A: The random split does not preserve chronology. A time-based split would better represent predicting future ratings.
